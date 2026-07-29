@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>土石方调配优化 Demo</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="hero__content">
+      <p class="hero__tag">全过程施工仿真优化与智能监控</p>
+      <h1>三峡区域土石方调配优化网页 Demo</h1>
+      <p class="hero__desc">
+        该页面用于展示项目背景、运输道路、施工难点、技术路线，以及前后端联动的数据展示方式。
+      </p>
+      <div class="hero__actions">
+        <a href="#architecture" class="btn btn--primary">查看前后端结构</a>
+        <a href="#route" class="btn btn--ghost">查看技术路线</a>
+      </div>
+    </div>
+    <div class="hero__panel">
+      <div class="status-card">
+        <span class="status-card__label">接口状态</span>
+        <strong id="apiStatus">检测中...</strong>
+        <small id="apiBaseUrl">API 地址：加载中</small>
+      </div>
+      <div class="status-card">
+        <span class="status-card__label">部署模式</span>
+        <strong>GitHub Pages + 独立后端</strong>
+        <small>前端静态托管，后端接口单独部署</small>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="section">
+      <div class="section__header">
+        <h2>核心指标</h2>
+        <p>下列数据由后端接口返回，前端负责展示。</p>
+      </div>
+      <div id="metricGrid" class="metric-grid"></div>
+    </section>
+
+    <section class="section">
+      <div class="section__header">
+        <h2>项目背景</h2>
+        <p>展示项目总体概况与关键建设信息。</p>
+      </div>
+      <div id="overviewGrid" class="card-grid"></div>
+    </section>
+
+    <section class="section">
+      <div class="section__header">
+        <h2>主要运输道路</h2>
+        <p>表格内容可来自数据库，也可由后端接口动态返回。</p>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>道路名称</th>
+              <th>主要用途</th>
+              <th>长度</th>
+              <th>等级</th>
+              <th>路面</th>
+            </tr>
+          </thead>
+          <tbody id="roadTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section__header">
+        <h2>项目难点</h2>
+        <p>这部分适合做成卡片、流程图或交互说明模块。</p>
+      </div>
+      <div id="challengeGrid" class="card-grid"></div>
+    </section>
+
+    <section id="route" class="section">
+      <div class="section__header">
+        <h2>技术路线</h2>
+        <p>围绕土石方调配流程、仿真优化、车辆实时调配进行分层展示。</p>
+      </div>
+      <div id="routeTimeline" class="timeline"></div>
+    </section>
+
+    <section id="architecture" class="section">
+      <div class="section__header">
+        <h2>前后端结构说明</h2>
+        <p>这部分用于演示“网页为什么能连后端”和“每一层各自做什么”。</p>
+      </div>
+      <div class="architecture">
+        <article class="arch-card">
+          <h3>前端</h3>
+          <ul>
+            <li>使用 `HTML` 搭建页面结构。</li>
+            <li>使用 `CSS` 控制样式、布局和视觉展示。</li>
+            <li>使用 `JavaScript` 通过 `fetch` 调用后端接口。</li>
+            <li>把接口返回的项目数据渲染成卡片、表格和时间线。</li>
+          </ul>
+        </article>
+        <article class="arch-card arch-card--focus">
+          <h3>接口层</h3>
+          <ul>
+            <li>接收前端请求，例如 `/api/overview`。</li>
+            <li>统一返回 JSON 数据，供前端渲染。</li>
+            <li>后续可以继续接数据库、算法服务、登录系统。</li>
+          </ul>
+        </article>
+        <article class="arch-card">
+          <h3>后端</h3>
+          <ul>
+            <li>可使用 `Node.js + Express` 搭建。</li>
+            <li>负责业务逻辑、数据处理、权限控制和跨域配置。</li>
+            <li>可部署到 `Render`、`Railway`、`Vercel Serverless` 等平台。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section__header">
+        <h2>现有网页接入方式</h2>
+        <p>如果你已经有自己的 `html` 页面，只需要预留这些容器节点，再引入脚本即可。</p>
+      </div>
+      <div class="snippet-box">
+<pre>&lt;div id="metricGrid"&gt;&lt;/div&gt;
+&lt;div id="overviewGrid"&gt;&lt;/div&gt;
+&lt;tbody id="roadTableBody"&gt;&lt;/tbody&gt;
+&lt;div id="challengeGrid"&gt;&lt;/div&gt;
+&lt;div id="routeTimeline"&gt;&lt;/div&gt;
+
+&lt;script src="./api-config.js"&gt;&lt;/script&gt;
+&lt;script src="./app.js"&gt;&lt;/script&gt;</pre>
+      </div>
+    </section>
+  </main>
+
+  <script src="./api-config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

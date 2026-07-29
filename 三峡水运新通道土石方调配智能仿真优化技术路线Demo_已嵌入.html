@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三峡水运新通道土石方调配仿真平台Demo</title>
+    <!-- 引入Tailwind简化样式，无需本地css文件 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 图表库ECharts 用于土石方数据图表 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- 后端地址配置，可单独修改 -->
+    <script src="./api-config.js"></script>
+    <style>
+        /* 自定义全局样式 */
+        .map-box {
+            border: 2px solid #2563eb;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .tab-item.active {
+            background-color: #2563eb;
+            color: white;
+        }
+        .dump-site-red { background: #ef4444; color:#fff; padding:2px 6px; border-radius:4px; }
+        .transit-site-green { background: #16a34a; color:#fff; padding:2px 6px; border-radius:4px; }
+        .road-blue { background: #2563eb; color:#fff; padding:2px 6px; border-radius:4px; }
+        .status-card {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width:6px;height:6px; }
+        ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen p-4">
+    <div class="max-w-7xl mx-auto">
+        <!-- 页面标题 -->
+        <header class="bg-blue-600 text-white p-4 rounded-lg mb-4 shadow-lg">
+            <h1 class="text-2xl font-bold">三峡水运新通道土石方全过程施工仿真优化与智能监控平台</h1>
+            <p class="text-sm opacity-90 mt-1">土石方调配技术路径可视化Demo | VS Code本地可直接运行</p>
+            <p id="project-background-tip" class="text-sm opacity-90 mt-2 leading-relaxed">
+                项目背景正在加载...
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-sm">
+                <div class="status-card">
+                    <p class="opacity-80">当前数据源</p>
+                    <p id="data-source-status" class="font-semibold mt-1">加载中...</p>
+                </div>
+                <div class="status-card">
+                    <p class="opacity-80">接口地址</p>
+                    <p id="api-base-url" class="font-semibold mt-1 break-all">未配置</p>
+                </div>
+                <div class="status-card">
+                    <p class="opacity-80">部署方式</p>
+                    <p class="font-semibold mt-1">GitHub Pages + 独立后端</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- 顶部标签切换栏 -->
+        <div class="flex gap-2 mb-4">
+            <button class="tab-item active px-4 py-2 rounded bg-slate-200 transition" data-tab="data-table">土石方基础数据</button>
+            <button class="tab-item px-4 py-2 rounded bg-slate-200 transition" data-tab="dump-map">渣场/道路地形分布图</button>
+            <button class="tab-item px-4 py-2 rounded bg-slate-200 transition" data-tab="sim-optimize">调配仿真优化技术路线</button>
+            <button class="tab-item px-4 py-2 rounded bg-slate-200 transition" data-tab="difficulty-solve">项目难点与解决方案</button>
+        </div>
+
+        <!-- 1. 土石方基础数据面板 -->
+        <section id="data-table" class="tab-panel">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- 总土石方汇总表格 -->
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h2 class="text-lg font-semibold mb-3 text-slate-800">表1 三峡水运新通道项目土石方汇总表(万m³)</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-blue-100">
+                                    <th class="border p-2">项目名称</th>
+                                    <th class="border p-2">开挖总量</th>
+                                    <th class="border p-2">填筑利用总量</th>
+                                    <th class="border p-2">外运至葛洲坝</th>
+                                    <th class="border p-2">弃渣自然方</th>
+                                    <th class="border p-2">折合松散方</th>
+                                </tr>
+                            </thead>
+                            <tbody id="total-rock-table">
+                                <!-- JS动态渲染数据 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- 年度开挖量图表 -->
+                <div class="bg-white p-4 rounded-lg shadow h-[420px]">
+                    <h2 class="text-lg font-semibold mb-3 text-slate-800">表2 三峡枢纽新通道逐年开挖量(松方)</h2>
+                    <div id="year-rock-chart" class="w-full h-[340px]"></div>
+                </div>
+                <!-- 场内道路运输总量图表 -->
+                <div class="bg-white p-4 rounded-lg shadow lg:col-span-2 h-[420px]">
+                    <h2 class="text-lg font-semibold mb-3 text-slate-800">场内主要道路总运输量统计</h2>
+                    <div id="road-trans-chart" class="w-full h-[340px]"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. 渣场道路地形分布图面板 -->
+        <section id="dump-map" class="tab-panel hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="map-box bg-white p-3">
+                    <h3 class="font-semibold mb-2">三峡枢纽新通道渣场总图</h3>
+                    <img src="https://p3-flow-image-sign.byteimg.com/tos-cn-i-a9rns2rl98/010101.png" alt="三峡渣场地形图" class="w-full h-auto">
+                    <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                        <span class="dump-site-red">红色：弃渣场</span>
+                        <span class="transit-site-green">绿色：中转堆存场</span>
+                        <span class="road-blue">蓝色：新建船闸航道</span>
+                    </div>
+                    <div class="mt-3 text-sm text-slate-700" id="three-gorges-sites-box">
+                        <p>弃渣场：靖江溪1#/2#/3#、枫香沟1#/2#、下岸溪</p>
+                        <p>中转料场：瓦窑坪、蹬子溪、丁家湾</p>
+                    </div>
+                </div>
+                <div class="map-box bg-white p-3">
+                    <h3 class="font-semibold mb-2">葛洲坝航运扩能弃渣场总图</h3>
+                    <img src="https://p3-flow-image-sign.byteimg.com/tos-cn-i-a9rns2rl98/020202.png" alt="葛洲坝渣场地形图" class="w-full h-auto">
+                    <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                        <span class="dump-site-red">红色：赵家沟/祠堂湾/黄家湾弃渣场</span>
+                        <span class="transit-site-green">绿色：丁家湾中转场</span>
+                    </div>
+                    <div class="mt-3 text-sm text-slate-700" id="gezhou-sites-box">
+                        <p>水运方案：开挖料→码头装船→黄柏河水运7km→葛洲坝渣场码头</p>
+                    </div>
+                </div>
+                <!-- 道路布置简图 -->
+                <div class="map-box bg-white p-3 lg:col-span-2">
+                    <h3 class="font-semibold mb-2">场内公路+胶带机运输线路总图</h3>
+                    <img src="https://p3-flow-image-sign.byteimg.com/tos-cn-i-a9rns2rl98/030303.png" alt="道路线路布置图" class="w-full h-auto">
+                    <div class="grid grid-cols-3 gap-2 mt-3 text-sm">
+                        <div class="border p-2 rounded">
+                            <h4 class="font-medium text-blue-600">一级公路</h4>
+                            <p>1#/3#/6#/7#/13#前段，路基12m，年运量＞1200万m³</p>
+                        </div>
+                        <div class="border p-2 rounded">
+                            <h4 class="font-medium text-orange-600">二级公路</h4>
+                            <p>太乐/2#/4#/11#/12#，路基11.5m，年运量250~1200万m³</p>
+                        </div>
+                        <div class="border p-2 rounded">
+                            <h4 class="font-medium text-gray-600">三级公路</h4>
+                            <p>6-1#公路，路基10.5m，年运量＜250万m³</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 border-t pt-3">
+                        <h4 class="font-medium text-slate-800 mb-2">接口返回的主要道路信息</h4>
+                        <div id="road-network-box" class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-slate-700">
+                            <p>主要道路数据加载中...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 土石方调配仿真优化技术路线面板 -->
+        <section id="sim-optimize" class="tab-panel hidden">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <!-- 一、建设目标 -->
+                <div class="mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-blue-700 mb-3">（一）建设目标</h2>
+                    <ul id="route-objectives-list" class="list-disc pl-6 space-y-2 text-slate-700">
+                        <li>实现16950.89万m³土石方全流程数字化平衡调配，最大化自身料资源化利用率，降低弃渣外运成本</li>
+                        <li>搭建土石方施工全过程仿真平台，模拟开挖、运输、堆存、骨料加工全链路动态工况</li>
+                        <li>实现场内运输车辆实时智能调度，解决高峰期380万m³/月开挖强度下道路拥堵瓶颈</li>
+                        <li>公路+水路+胶带机多模式运输协同优化，减少生态红线、风景区道路新建约束影响</li>
+                        <li>建立弃渣场堆存容量动态监控，满足水土保持方案单场堆渣≤2000万m³、堆高≤200m管控要求</li>
+                    </ul>
+                </div>
+                <!-- 二、建设思路 -->
+                <div class="mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-blue-700 mb-3">（二）建设思路</h2>
+                    <p id="route-approach-text" class="text-slate-700 leading-relaxed">
+                        以三峡水运新通道土石方时空平衡为核心约束，以施工路网、渣场库容、运输强度、生态管控为边界条件；
+                        先完成土石方静态平衡计算，再引入施工进度时序数据构建动态仿真模型；融合公路自卸车、水路船舶、胶带机三种运输方式，
+                        建立多目标优化算法（运输成本、工期、道路负荷、生态影响）；配套车辆GPS实时调度系统、渣场库容在线监测、砂石加工系统产能联动模块，
+                        形成“静态平衡计算-动态仿真推演-实时智能调度-资源化利用管控”一体化土石方智能调配体系。
+                    </p>
+                </div>
+                <!-- 三、总体设计 -->
+                <div class="mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-blue-700 mb-3">（三）总体设计</h2>
+                    <div id="route-modules-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        <!-- 1.土石方调配流程 -->
+                        <div class="bg-slate-50 p-4 rounded border">
+                            <h3 class="font-semibold text-lg mb-2">1.土石方调配全流程</h3>
+                            <div class="text-sm space-y-1">
+                                <p>①开挖工作面分区分层开采（土方/A/B/C类岩石分类）</p>
+                                <p>②现场筛分：有用骨料/中转资源化料/纯弃渣分流</p>
+                                <p>③分流运输：</p>
+                                <p class="pl-4">- 骨料→瓦窑坪/下岸溪砂石加工系统</p>
+                                <p class="pl-4">- 资源化料→蹬子溪公路运输、丁家湾水路运输</p>
+                                <p class="pl-4">- 弃渣→规划6处三峡弃渣场、葛洲坝3处弃渣场</p>
+                                <p>④渣场动态堆存监控，库容超限预警</p>
+                                <p>⑤填筑回填、工业园场平、社会消纳资源化闭环</p>
+                            </div>
+                        </div>
+                        <!-- 2.仿真优化模块 -->
+                        <div class="bg-slate-50 p-4 rounded border">
+                            <h3 class="font-semibold text-lg mb-2">2.施工仿真优化模块</h3>
+                            <div class="text-sm space-y-1">
+                                <p>• 时序仿真：2025-2034逐年开挖强度加载</p>
+                                <p>• 路网仿真：各级公路通行能力、瓶颈路段拥堵模拟</p>
+                                <p>• 多运输模式耦合：公路/水运/胶带机联合仿真</p>
+                                <p>• 多目标优化：最低运输成本、最短工期、最小生态扰动</p>
+                                <p>• 渣场库容仿真：逐年堆渣量动态校验水土保持管控指标</p>
+                                <p>• 骨料产能联动仿真：匹配混凝土浇筑高峰40.9万m³/月</p>
+                            </div>
+                        </div>
+                        <!-- 3.车辆实时调配模块 -->
+                        <div class="bg-slate-50 p-4 rounded border">
+                            <h3 class="font-semibold text-lg mb-2">3.车辆实时智能调配</h3>
+                            <div class="text-sm space-y-1">
+                                <p>• 车载GPS实时定位，全路网车流实时采集</p>
+                                <p>• 岔口、隧道瓶颈区域车流预判预警</p>
+                                <p>• 动态分配运输路线，分流拥堵路段</p>
+                                <p>• 按开挖工作面、渣场剩余库容动态分配车队数量</p>
+                                <p>• 水路船舶调度：错峰避开葛洲坝弃渣水运高峰期</p>
+                                <p>• 运输强度自动均衡，控制月均运输峰值</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 四、技术难点及解决思路 -->
+                <div>
+                    <h2 class="text-xl font-bold text-blue-700 mb-3">（四）核心技术难点及对应解决思路</h2>
+                    <div class="space-y-4 mt-4" id="tech-difficulty-box">
+                        <!-- JS动态渲染难点列表 -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4.项目难点与解决方案面板 -->
+        <section id="difficulty-solve" class="tab-panel hidden">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-bold text-blue-700 mb-4">项目核心难点汇总+配套解决技术路线</h2>
+                <div class="space-y-6" id="all-difficulty-list">
+                    <!-- JS渲染完整难点 -->
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const API_BASE_URL = (window.APP_CONFIG?.API_BASE_URL || '').replace(/\/$/, '');
+
+        const LOCAL_DEMO_DATA = {
+            projectBackground: {
+                title: "三峡水运新通道项目背景",
+                content: "项目由三峡枢纽新通道工程和葛洲坝航运扩能工程组成，涉及大规模土石方开挖、弃渣调配、资源化利用、道路运输组织和砂石加工系统联动。",
+                sections: ["三峡枢纽新通道工程", "葛洲坝航运扩能工程", "弃渣与资源化利用", "场内道路与运输组织"]
+            },
+            totalRockData: [
+                {name:"三峡枢纽新通道工程", dig:15259.82, use:2015.91, outGezhou:90.94, wasteNat:13152.91, wasteLoose:16815.05},
+                {name:"葛洲坝航运扩能工程", dig:1691.07, use:160.34, outGezhou:"—", wasteNat:1530.73, wasteLoose:1775.83},
+                {name:"合计", dig:16950.89, use:2272.55, outGezhou:90.94, wasteNat:14683.70, wasteLoose:18590.88}
+            ],
+            yearDigData: {
+                year:["2025","2026","2027","2028","2029","2030","2031","2032","2033","2034"],
+                soil:[35,255,608,348,1828,588,198,0,116,0],
+                rockA:[48,190,162,252,284,556,30,0,218,42],
+                rockB:[2,206,460,598,714,876,156,0,0,0],
+                rockC:[32,863,1377,1641,2030,1673,367,58,0,0]
+            },
+            disposalSites: [
+                { region: "三峡枢纽新通道工程", type: "弃渣场", name: "靖江溪1#/2#/3#" },
+                { region: "三峡枢纽新通道工程", type: "弃渣场", name: "枫香沟1#/2#" },
+                { region: "三峡枢纽新通道工程", type: "弃渣场", name: "下岸溪" },
+                { region: "三峡枢纽新通道工程", type: "临时堆存场", name: "瓦窑坪、蹬子溪、丁家湾" },
+                { region: "葛洲坝航运扩能工程", type: "弃渣场", name: "赵家沟、祠堂湾、黄家湾" }
+            ],
+            roadNetwork: [
+                { name: "1#公路", level: "一级", length: "4.56km", usage: "上游引航道开挖弃渣运输" },
+                { name: "3#公路", level: "一级", length: "8.27km", usage: "引航道及闸室段开挖弃渣运输" },
+                { name: "6#公路", level: "一级", length: "1.24km", usage: "上游引航道及闸室段开挖弃渣运输" },
+                { name: "10#公路", level: "一级公路", length: "1.18km", usage: "骨料运输及后期通道" },
+                { name: "13#公路", level: "一级+二级", length: "3.66km", usage: "资源化利用弃渣运输至蹬子溪临时堆场" }
+            ],
+            roadTransData: {
+                road:["1#公路","太乐公路","2#公路","3#公路前段","3#公路中段","3#公路后段","6#公路","江峡三路西段","7#公路","12#公路"],
+                total:[2619.39,1291.12,1568.79,1585.72,2460.35,1783.31,3224.57,4502.37,2002.30,1674.42]
+            },
+            techRouteObjectives: [
+                "实现16950.89万m³土石方全过程数字化平衡调配",
+                "搭建施工全过程仿真平台",
+                "实现场内运输车辆实时智能调度",
+                "实现公路、水路、胶带机多模式运输协同优化",
+                "建立弃渣场堆存容量动态监控与预警"
+            ],
+            techRouteApproach: {
+                coreIdea: "以时空平衡为核心，以路网、库容、运输强度、生态管控为边界，形成静态平衡计算、动态仿真推演、实时智能调度、资源化利用管控一体化体系。"
+            },
+            techRouteModules: [
+                {
+                    module: "土石方调配流程",
+                    items: ["开挖工作面分区分层开采", "骨料、资源化料、弃渣分流", "弃渣与有用料定向运输", "渣场堆存动态监控", "形成资源化闭环"]
+                },
+                {
+                    module: "施工仿真优化模块",
+                    items: ["时序仿真", "路网仿真", "多运输方式耦合", "多目标优化", "库容动态校验", "骨料产能联动仿真"]
+                },
+                {
+                    module: "车辆实时智能调配",
+                    items: ["车载GPS实时定位", "拥堵瓶颈预判预警", "动态路线分配", "车队规模动态调整", "船舶错峰调度"]
+                }
+            ],
+            techDifficultyList: [
+                {
+                    title:"难点1：多源动态因素下土石方施工进度精准管控难题",
+                    trouble:"项目开挖总量超1.69亿m³，多开挖面分散开采，高峰期月开挖380万m³；施工交通、渣场库容、骨料供需、生态管控动态变化，时空耦合关系复杂，传统静态平衡无法匹配实时施工工况，进度预判偏差大。",
+                    solve:"1.构建土石方时序动态仿真模型，导入2025-2034逐年分层开挖数据；2.耦合渣场库容、道路通行能力、砂石加工产能多约束；3.仿真推演不同开挖调度方案，提前预判工期瓶颈；4.搭建实时进度监控看板，动态更新开挖、堆存、利用数据。"
+                },
+                {
+                    title:"难点2：复杂路网高强度运输车流调度拥堵瓶颈",
+                    trouble:"场内总道路46.02km，一级/二级/三级公路分级运输，高峰期大量自卸车往返开挖面与12处渣场；隧道、窄路基、岔口易形成交通瓶颈，人工调度效率低，运输强度无法均衡。",
+                    solve:"1.路网仿真模拟全路段车流负荷，识别拥堵节点；2.车载GPS实时采集车辆位置，云端智能分配最优运输路线；3.按渣场剩余库容动态分配车队规模；4.分级道路分流管控，一级公路承担大宗弃渣运输，三级公路承担短途支线；5.错峰运输，均衡月度道路负荷。"
+                },
+                {
+                    title:"难点3：丁家湾资源化料公路运输生态约束，长途转运成本高",
+                    trouble:"丁家湾中转场距开挖区超30km，现有三峡专用公路运输饱和，沿线为生态红线、三峡风景名胜区，无新建公路条件，公路运输成本极高。",
+                    solve:"采用「胶带机+码头装船+水路运输」组合方案：1.开挖料经胶带机输送至平湖/菜籽坝码头；2.装船机散货装船，自航自卸船沿黄柏河水运7km；3.葛洲坝码头胶带机转运至丁家湾堆存场；4.水运时段避开葛洲坝弃渣运输高峰，降低航道冲突。"
+                },
+                {
+                    title:"难点4：多类型料分流管控，资源化利用率提升难度大",
+                    trouble:"开挖料分为土方、三类岩石，部分可加工混凝土骨料、部分可场平填筑，纯弃渣需堆存；多料混杂开采易造成有用料浪费，弃渣堆存压力大。",
+                    solve:"1.开挖工作面前置筛分系统，实现骨料、资源化料、弃渣实时分流；2.瓦窑坪、蹬子溪专用中转场分类堆存有用料；3.仿真优化料流分配，最大化骨料加工、工业园场平消纳量；4.分年度管控中转场堆存量，匹配砂石加工系统产能。"
+                },
+                {
+                    title:"难点5：弃渣场水土保持刚性约束，堆存容量动态平衡难",
+                    trouble:"水保方案要求单渣场堆渣≤2000万m³、堆高≤200m，12处渣场分散布置，逐年堆渣量波动大，易出现局部渣场满库、部分渣场闲置。",
+                    solve:"1.仿真计算逐年各渣场堆渣增量，动态调整料流分配路线；2.实时监控渣场堆渣高程、库容，超限自动预警；3.跨渣场转运调配，均衡各堆存区负荷；4.区分永久弃渣场与资源化中转场，差异化管控堆存上限。"
+                }
+            ]
+        };
+
+        const tabBtns = document.querySelectorAll('.tab-item');
+        const tabPanels = document.querySelectorAll('.tab-panel');
+        const tableDom = document.getElementById('total-rock-table');
+        const techBox = document.getElementById('tech-difficulty-box');
+        const allDiffBox = document.getElementById('all-difficulty-list');
+        const dataSourceStatus = document.getElementById('data-source-status');
+        const apiBaseUrlText = document.getElementById('api-base-url');
+        const backgroundTip = document.getElementById('project-background-tip');
+        const threeGorgesSitesBox = document.getElementById('three-gorges-sites-box');
+        const gezhouSitesBox = document.getElementById('gezhou-sites-box');
+        const roadNetworkBox = document.getElementById('road-network-box');
+        const objectivesList = document.getElementById('route-objectives-list');
+        const approachText = document.getElementById('route-approach-text');
+        const modulesGrid = document.getElementById('route-modules-grid');
+        const yearChart = echarts.init(document.getElementById('year-rock-chart'));
+        const roadChart = echarts.init(document.getElementById('road-trans-chart'));
+
+        setupTabs();
+        initPage();
+
+        async function initPage() {
+            apiBaseUrlText.textContent = API_BASE_URL || '未配置，当前使用页面内置演示数据';
+            const pageData = await loadPageDataByModules();
+
+            renderProjectBackground(pageData.projectBackground);
+            renderTotalRockTable(pageData.totalRockData);
+            renderYearChart(pageData.yearDigData);
+            renderDisposalSites(pageData.disposalSites);
+            renderRoadNetwork(pageData.roadNetwork);
+            renderRoadChart(pageData.roadTransData);
+            renderTechRouteObjectives(pageData.techRouteObjectives);
+            renderTechRouteApproach(pageData.techRouteApproach);
+            renderTechRouteModules(pageData.techRouteModules);
+            renderDifficultyLists(pageData.techDifficultyList);
+
+            window.dispatchEvent(new Event('resize'));
+        }
+
+        function setupTabs() {
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    tabBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const targetId = btn.dataset.tab;
+                    tabPanels.forEach(panel => panel.classList.add('hidden'));
+                    document.getElementById(targetId).classList.remove('hidden');
+                    window.dispatchEvent(new Event('resize'));
+                });
+            });
+        }
+
+        async function loadPageDataByModules() {
+            if (!API_BASE_URL) {
+                updateDataSourceStatus(false, '未配置后端，当前为本地演示数据');
+                return LOCAL_DEMO_DATA;
+            }
+
+            try {
+                const [
+                    projectBackground,
+                    totalRockData,
+                    yearDigData,
+                    disposalSites,
+                    roadNetwork,
+                    roadTransData,
+                    techRouteObjectives,
+                    techRouteApproach,
+                    techRouteModules,
+                    techDifficultyList
+                ] = await Promise.all([
+                    request('/api/project/background'),
+                    request('/api/earthwork/summary'),
+                    request('/api/earthwork/annual-excavation'),
+                    request('/api/sites/disposal'),
+                    request('/api/roads/network'),
+                    request('/api/roads/transport-statistics'),
+                    request('/api/tech-route/objectives'),
+                    request('/api/tech-route/approach'),
+                    request('/api/tech-route/modules'),
+                    request('/api/difficulties')
+                ]);
+
+                updateDataSourceStatus(true, '已连接后端，当前为分模块接口数据');
+                return {
+                    projectBackground: projectBackground || LOCAL_DEMO_DATA.projectBackground,
+                    totalRockData: totalRockData || LOCAL_DEMO_DATA.totalRockData,
+                    yearDigData: yearDigData || LOCAL_DEMO_DATA.yearDigData,
+                    disposalSites: disposalSites || LOCAL_DEMO_DATA.disposalSites,
+                    roadNetwork: roadNetwork || LOCAL_DEMO_DATA.roadNetwork,
+                    roadTransData: roadTransData || LOCAL_DEMO_DATA.roadTransData,
+                    techRouteObjectives: techRouteObjectives || LOCAL_DEMO_DATA.techRouteObjectives,
+                    techRouteApproach: techRouteApproach || LOCAL_DEMO_DATA.techRouteApproach,
+                    techRouteModules: techRouteModules || LOCAL_DEMO_DATA.techRouteModules,
+                    techDifficultyList: techDifficultyList || LOCAL_DEMO_DATA.techDifficultyList
+                };
+            } catch (error) {
+                console.error('模块接口加载失败，已回退到本地演示数据：', error);
+                updateDataSourceStatus(false, '后端连接失败，已回退到本地演示数据');
+                return LOCAL_DEMO_DATA;
+            }
+        }
+
+        async function request(path) {
+            const response = await fetch(`${API_BASE_URL}${path}`);
+            if (!response.ok) {
+                throw new Error(`请求失败: ${path} ${response.status}`);
+            }
+            return response.json();
+        }
+
+        function updateDataSourceStatus(isRemote, text) {
+            dataSourceStatus.textContent = text;
+            dataSourceStatus.className = isRemote ? 'font-semibold mt-1 text-emerald-100' : 'font-semibold mt-1 text-yellow-100';
+        }
+
+        function renderProjectBackground(projectBackground) {
+            backgroundTip.textContent = `${projectBackground.title}：${projectBackground.content}`;
+        }
+
+        function renderTotalRockTable(totalRockData) {
+            tableDom.innerHTML = '';
+            totalRockData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = row.name === "合计" ? "bg-blue-50 font-medium" : "";
+                tr.innerHTML = `
+                    <td class="border p-2">${row.name}</td>
+                    <td class="border p-2">${row.dig}</td>
+                    <td class="border p-2">${row.use}</td>
+                    <td class="border p-2">${row.outGezhou}</td>
+                    <td class="border p-2">${row.wasteNat}</td>
+                    <td class="border p-2">${row.wasteLoose}</td>
+                `;
+                tableDom.appendChild(tr);
+            });
+        }
+
+        function renderYearChart(yearDigData) {
+            yearChart.setOption({
+                tooltip:{trigger:'axis'},
+                legend:{data:["土方","A类全强石","B类弱风化","C类微新石"]},
+                xAxis:{type:'category', data:yearDigData.year},
+                yAxis:{type:'value', name:"开挖量(万m³松方)"},
+                series:[
+                    {name:"土方", type:"bar", stack:"total", data:yearDigData.soil},
+                    {name:"A类全强石", type:"bar", stack:"total", data:yearDigData.rockA},
+                    {name:"B类弱风化", type:"bar", stack:"total", data:yearDigData.rockB},
+                    {name:"C类微新石", type:"bar", stack:"total", data:yearDigData.rockC}
+                ]
+            });
+        }
+
+        function renderDisposalSites(disposalSites) {
+            const threeGorges = disposalSites.filter(item => item.region.includes('三峡'));
+            const gezhou = disposalSites.filter(item => item.region.includes('葛洲坝'));
+
+            threeGorgesSitesBox.innerHTML = threeGorges.map(item => `<p>${item.type}：${item.name}</p>`).join('');
+            gezhouSitesBox.innerHTML = `
+                ${gezhou.map(item => `<p>${item.type}：${item.name}</p>`).join('')}
+                <p class="mt-2">水运方案：开挖料→码头装船→黄柏河水运→葛洲坝渣场码头</p>
+            `;
+        }
+
+        function renderRoadNetwork(roadNetwork) {
+            roadNetworkBox.innerHTML = roadNetwork.map(road => `
+                <div class="border rounded p-2 bg-slate-50">
+                    <p class="font-medium text-slate-800">${road.name} <span class="text-xs text-blue-600">(${road.level})</span></p>
+                    <p>长度：${road.length}</p>
+                    <p>用途：${road.usage}</p>
+                </div>
+            `).join('');
+        }
+
+        function renderRoadChart(roadTransData) {
+            roadChart.setOption({
+                tooltip:{trigger:'axis'},
+                xAxis:{type:'category', data:roadTransData.road, axisLabel:{rotate:30}},
+                yAxis:{type:'value', name:"总运输量(万m³)"},
+                series:[{type:"bar", data:roadTransData.total, color:"#2563eb"}]
+            });
+        }
+
+        function renderTechRouteObjectives(objectives) {
+            objectivesList.innerHTML = objectives.map(item => `<li>${item}</li>`).join('');
+        }
+
+        function renderTechRouteApproach(approach) {
+            approachText.textContent = approach.coreIdea || '';
+        }
+
+        function renderTechRouteModules(modules) {
+            modulesGrid.innerHTML = modules.map((item, index) => `
+                <div class="bg-slate-50 p-4 rounded border">
+                    <h3 class="font-semibold text-lg mb-2">${index + 1}.${item.module}</h3>
+                    <div class="text-sm space-y-1">
+                        ${item.items.map(text => `<p>• ${text}</p>`).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderDifficultyLists(techDifficultyList) {
+            techBox.innerHTML = '';
+            allDiffBox.innerHTML = '';
+
+            techDifficultyList.forEach(item => {
+                const techItem = document.createElement('div');
+                techItem.className = "border-l-4 border-blue-500 pl-4 py-2";
+                techItem.innerHTML = `
+                    <h4 class="font-semibold text-slate-900">${item.title}</h4>
+                    <p class="text-sm text-red-600 mt-1"><strong>痛点：</strong>${item.trouble}</p>
+                    <p class="text-sm text-green-700 mt-1"><strong>解决思路：</strong>${item.solve}</p>
+                `;
+                techBox.appendChild(techItem);
+
+                const fullDiffItem = document.createElement('div');
+                fullDiffItem.className = "border p-4 rounded-lg bg-slate-50";
+                fullDiffItem.innerHTML = `
+                    <h3 class="text-lg font-semibold text-blue-800">${item.title}</h3>
+                    <div class="mt-3">
+                        <p class="font-medium text-red-700">▶ 项目痛点：</p>
+                        <p class="mt-1 text-slate-700">${item.trouble}</p>
+                    </div>
+                    <div class="mt-3">
+                        <p class="font-medium text-green-700">▶ 配套技术解决路线：</p>
+                        <p class="mt-1 text-slate-700">${item.solve}</p>
+                    </div>
+                `;
+                allDiffBox.appendChild(fullDiffItem);
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            yearChart.resize();
+            roadChart.resize();
+        });
+    </script>
+</body>
+</html>
